@@ -207,22 +207,49 @@ def send_slack_alert(webhook_url: str, summary: dict, flagged: list[dict]):
 
 # ── HTML Dashboard ────────────────────────────────────────────────────────────
 
-def generate_html_report(trades, flagged, summary, ai_text):
+def generate_html_report(trades, flagged, summary, ai_analysis):
+    # Prepare data for the chart (Desks and their PnL)
+    desk_labels = list(summary["by_desk"].keys())
+    desk_values = list(summary["by_desk"].values())
 
     return f"""
     <html>
-    <body style="font-family: sans-serif; padding: 20px; line-height: 1.6;">
-        <h1>MiddleLayer Operations Report</h1>
-        <div style="background: #eef2ff; padding: 15px; border-left: 5px solid #3b82f6;">
-            <h2>AI Analysis</h2>
-            <p>{ai_text.replace('\n', '<br>')}</p>
+    <head>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            body {{ font-family: sans-serif; margin: 40px; background: #f4f7f9; }}
+            .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }}
+            .chart-container {{ width: 400px; margin: 0 auto; }}
+        </style>
+    </head>
+    <body>
+        <h1>MiddleLayer Operations Dashboard</h1>
+        
+        <div class="card">
+            <h2>PnL Distribution by Desk</h2>
+            <div class="chart-container">
+                <canvas id="pnlChart"></canvas>
+            </div>
         </div>
-        <h2>Financial Summary</h2>
-        <ul>
-            <li>Total Trades: {summary['total_trades']}</li>
-            <li>Total PnL: €{summary['total_pnl_eur']:,}</li>
-            <li>Anomalies Detected: {summary['flagged_count']}</li>
-        </ul>
+
+        <div class="card">
+            <h2>System Briefing</h2>
+            <p>{ai_analysis.replace(chr(10), '<br>')}</p>
+        </div>
+
+        <script>
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            new Chart(ctx, {{
+                type: 'pie',
+                data: {{
+                    labels: {json.dumps(desk_labels)},
+                    datasets: [{{
+                        data: {json.dumps(desk_values)},
+                        backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+                    }}]
+                }}
+            }});
+        </script>
     </body>
     </html>
     """
