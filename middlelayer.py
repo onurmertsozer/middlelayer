@@ -157,6 +157,58 @@ def build_summary(trades: list[dict], flagged: list[dict]) -> dict:
         "generated_at":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
+# ── Slack Integration ─────────────────────────────────────────────────────────
+
+def send_slack_alert(webhook_url: str, summary: dict, flagged: list[dict]):
+    """
+    Formats and sends a high-level briefing to a Slack channel via Incoming Webhooks.
+    """
+    if not webhook_url:
+        return
+
+    # Set status color: Red for anomalies, Green for a clean run
+    color = "#991B1B" if summary["flagged_count"] > 0 else "#166534"
+    
+    # Format the top 5 anomalies for the Slack message
+    flagged_text = ""
+    for t in flagged[:5]:
+        flags_str = ", ".join(t['flags'])
+        flagged_text += f"• *{t['id']}* ({t['instrument']}): €{t['pnl_eur']:,.2f} ➔ {flags_str}\n"
+    
+    if not flagged_text:
+        flagged_text = "All clear. No manual intervention required. ✅"
+
+    # Prepare the Slack payload using Block Kit-style attachments
+    slack_data = {
+        "attachments": [
+            {
+                "color": color,
+                "fallback": "MiddleLayer Daily Operations Briefing",
+                "title": "📊 MiddleLayer Daily Ops Briefing",
+                "text": (
+                    f"*Total Trades Analyzed:* {summary['total_trades']}\n"
+                    f"*Total PnL:* €{summary['total_pnl_eur']:,.2f}\n"
+                    f"*Anomalies Flagged:* {summary['flagged_count']}\n\n"
+                    f"*⚠️ Top Concerns:*\n{flagged_text}"
+                ),
+                "footer": "MiddleLayer Ops Intelligence",
+                "ts": int(datetime.now().timestamp())
+            }
+        ]
+    }
+
+    # Execute the request using standard urllib
+    req = urllib.request.Request(
+        webhook_url, 
+        data=json.dumps(slack_data).encode("utf-8"), 
+        headers={"Content-Type": "application/json"}
+    )
+    
+    try:
+        urllib.request.urlopen(req)
+        print("  ✅ Slack alert sent successfully!")
+    except Exception as e:
+        print(f"  ⚠️ Failed to send Slack alert: {e}")
 # ── HTML Dashboard ────────────────────────────────────────────────────────────
 
 def generate_html_report(trades: list[dict], flagged: list[dict], summary: dict, ai_analysis: str) -> str:
@@ -209,24 +261,25 @@ def main():
     parser = argparse.ArgumentParser(description="MiddleLayer — Ops Intelligence")
     parser.add_argument("--input",  default="trades.csv",   help="Trade CSV file path")
     parser.add_argument("--output", default="report.html",  help="HTML report output path")
+    # New argument for Slack integration:
+    parser.add_argument("--slack-webhook", default=None,    help="Slack Incoming Webhook URL")
     args = parser.parse_args()
 
     print("MiddleLayer — starting analysis...")
     
-    try:
-        trades = load_trades(args.input)
-    except FileNotFoundError:
-        print(f"Error: Could not find the file '{args.input}'")
-        return
-
+    # Load and process trades 
+    trades  = load_trades(args.input)
     trades  = run_pnl_engine(trades)
     flagged = detect_anomalies(trades)
     summary = build_summary(trades, flagged)
 
-    print(f"  Trades loaded:  {summary['total_trades']}")
-    print(f"  Flagged:        {summary['flagged_count']}")
-    print("  Calling AI for analysis...")
+    # Trigger Slack Alert if a URL is provided 
+    if args.slack_webhook:
+        print("  Sending notification to Slack...")
+        send_slack_alert(args.slack_webhook, summary, flagged)
 
+    # Continue to AI analysis and HTML report generation 
+    print("  Calling Claude API for AI analysis...")
     ai_analysis = get_ai_explanation(flagged, summary)
 
     html = generate_html_report(trades, flagged, summary, ai_analysis)
@@ -235,6 +288,3 @@ def main():
         f.write(html)
         
     print(f"✅ Report successfully generated: {args.output}")
-
-if __name__ == "__main__":
-    main()
