@@ -180,47 +180,8 @@ def build_summary(trades: list[dict], flagged: list[dict]) -> dict:
 
 def send_slack_alert(webhook_url: str, summary: dict, flagged: list[dict]):
     if not webhook_url: return
-
-    color = "#991B1B" if summary["flagged_count"] > 0 else "#166534"
-    flagged_text = ""
-    for t in flagged[:5]:
-        flags_str = ", ".join(t['flags'])
-        flagged_text += f"• *{t['id']}* ({t['instrument']}): €{t['pnl_eur']:,.2f} ➔ {flags_str}\n"
-    
-    if not flagged_text: flagged_text = "All clear. ✅"
-
-    slack_data = {
-        "attachments": [{
-            "color": color,
-            "title": "📊 MiddleLayer Daily Ops Briefing",
-            "text": (
-                f"*Total Trades:* {summary['total_trades']} | *PnL:* €{summary['total_pnl_eur']:,.2f}\n"
-                f"*Anomalies:* {summary['flagged_count']}\n\n*⚠️ Top Concerns:*\n{flagged_text}"
-            ),
-            "footer": "MiddleLayer Ops Intelligence",
-            "ts": int(datetime.now().timestamp())
-        }]
-    }
-
-    req = urllib.request.Request(
-        webhook_url, 
-        data=json.dumps(slack_data).encode("utf-8"), 
-        headers={"Content-Type": "application/json"}
-    )
-    
-    try:
-        urllib.request.urlopen(req)
-        print("  ✅ Slack alert sent successfully!")
-    except Exception:
-        print("  ⚠️ Failed to send Slack alert.")
-
-# ── HTML Dashboard ────────────────────────────────────────────────────────────
-
-def send_slack_alert(webhook_url: str, summary: dict, flagged: list[dict]):
-    if not webhook_url: return
     color = "#991B1B" if summary["flagged_count"] > 0 else "#166534"
     
-    # Text kısmını ayrı bir değişken yapıp üç tırnakla tanımlıyoruz
     message_text = f"""📊 *MiddleLayer Ops Briefing*
 *PnL:* €{summary['total_pnl_eur']:,}
 *Anomalies:* {summary['flagged_count']} flagged for review."""
@@ -244,6 +205,27 @@ def send_slack_alert(webhook_url: str, summary: dict, flagged: list[dict]):
     except Exception as e: 
         print(f"  ⚠️ Slack failed: {e}")
 
+# ── HTML Dashboard ────────────────────────────────────────────────────────────
+
+def generate_html(trades, flagged, summary, ai_text):
+
+    return f"""
+    <html>
+    <body style="font-family: sans-serif; padding: 20px; line-height: 1.6;">
+        <h1>MiddleLayer Operations Report</h1>
+        <div style="background: #eef2ff; padding: 15px; border-left: 5px solid #3b82f6;">
+            <h2>AI Analysis</h2>
+            <p>{ai_text.replace('\n', '<br>')}</p>
+        </div>
+        <h2>Financial Summary</h2>
+        <ul>
+            <li>Total Trades: {summary['total_trades']}</li>
+            <li>Total PnL: €{summary['total_pnl_eur']:,}</li>
+            <li>Anomalies Detected: {summary['flagged_count']}</li>
+        </ul>
+    </body>
+    </html>
+    """
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
